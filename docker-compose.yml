@@ -1,0 +1,42 @@
+services:
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: video-meta-nginx
+    restart: unless-stopped
+    depends_on:
+      - api
+    expose:
+      - "8080"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/templates:ro
+      - ./data:/data:ro
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: video-meta-cloudflared
+    restart: unless-stopped
+    depends_on:
+      - nginx
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}
+    command: tunnel --no-autoupdate run
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: video-meta-api
+    restart: unless-stopped
+    expose:
+      - "8080"
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

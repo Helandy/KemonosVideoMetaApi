@@ -1,0 +1,9 @@
+.git
+.gradle
+build
+out
+video-meta.db
+thumbnail
+data
+.idea
+*.iml
