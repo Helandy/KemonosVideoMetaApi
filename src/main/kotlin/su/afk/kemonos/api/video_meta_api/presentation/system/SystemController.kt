@@ -1,6 +1,7 @@
 package su.afk.kemonos.api.video_meta_api.presentation.system
 
 import jakarta.validation.Valid
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
@@ -24,7 +25,13 @@ import java.time.Instant
 class SystemController(
     private val requestLogRepository: ApiRequestLogRepository,
     private val sourceErrorLogRepository: SourceErrorLogRepository,
+    @Value("\${app.version.cache-ttl-seconds:15}")
+    versionCacheTtlSeconds: Long,
 ) {
+    private val versionCacheTtlMillis = (versionCacheTtlSeconds.coerceAtLeast(0) * 1_000)
+    @Volatile
+    private var versionStatsCache: CachedVersionStats? = null
+
     /**
      * Возвращает простой health-check ответ.
      */
@@ -39,8 +46,13 @@ class SystemController(
      */
     @GetMapping("/version")
     fun version(): VersionStatsResponse {
+        if (versionCacheTtlMillis > 0) {
+            val now = System.currentTimeMillis()
+            versionStatsCache?.takeIf { it.expiresAtMillis > now }?.let { return it.payload }
+        }
+
         val rows = requestLogRepository.countRequestsByVersion()
-        return VersionStatsResponse(
+        val payload = VersionStatsResponse(
             totalRequests = rows.sumOf { it.requestsCount },
             versions = rows.map {
                 VersionRequestCountResponse(
@@ -49,6 +61,13 @@ class SystemController(
                 )
             },
         )
+        if (versionCacheTtlMillis > 0) {
+            versionStatsCache = CachedVersionStats(
+                payload = payload,
+                expiresAtMillis = System.currentTimeMillis() + versionCacheTtlMillis,
+            )
+        }
+        return payload
     }
 
     /**
@@ -91,3 +110,8 @@ class SystemController(
         )
     }
 }
+
+private data class CachedVersionStats(
+    val payload: VersionStatsResponse,
+    val expiresAtMillis: Long,
+)

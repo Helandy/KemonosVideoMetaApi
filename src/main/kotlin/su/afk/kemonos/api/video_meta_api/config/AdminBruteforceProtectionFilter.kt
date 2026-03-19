@@ -21,7 +21,7 @@ class AdminBruteforceProtectionFilter(
 ) : OncePerRequestFilter() {
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {
         val path = request.requestURI.orEmpty()
-        return !(path.startsWith("/actuator/") || path == "/errors/source" || path == "/api/video/remove")
+        return !(path.startsWith("/actuator/") || path == "/errors/source" || path == "/api/video/remove" || path == "/version")
     }
 
     override fun doFilterInternal(

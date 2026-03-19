@@ -25,7 +25,7 @@ class AdminSecurityConfig(
     @Order(1)
     fun adminSecurityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
-            .securityMatcher("/actuator/**", "/errors/source", "/api/video/remove")
+            .securityMatcher("/actuator/**", "/errors/source", "/api/video/remove", "/version")
             .csrf { csrf -> csrf.disable() }
             .formLogin { formLogin -> formLogin.disable() }
             .httpBasic(Customizer.withDefaults())

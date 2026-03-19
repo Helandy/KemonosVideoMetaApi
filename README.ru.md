@@ -32,10 +32,10 @@ Client -> nginx -> Spring Boot API -> SQLite
 - `POST /api/video/info`
 - `POST /api/file/info`
 - `GET /status`
-- `GET /version`
 
 Защищённые endpoints:
 
+- `GET /version`
 - `GET /actuator/health`
 - `GET /actuator/info`
 - `GET /actuator/metrics`
@@ -181,6 +181,7 @@ http://localhost:8080/errors/source?limit=100
 ### Runtime метрики
 
 ```bash
+curl -u admin:YOUR_ADMIN_KEY http://localhost:8080/version
 curl -u admin:YOUR_ADMIN_KEY http://localhost:8080/actuator/health
 curl -u admin:YOUR_ADMIN_KEY http://localhost:8080/actuator/metrics
 curl -u admin:YOUR_ADMIN_KEY http://localhost:8080/actuator/metrics/http.server.requests
