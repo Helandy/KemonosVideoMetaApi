@@ -9,6 +9,7 @@ import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.core.userdetails.User
 import org.springframework.security.core.userdetails.UserDetailsService
 import org.springframework.security.core.userdetails.UsernameNotFoundException
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter
 import org.springframework.security.web.SecurityFilterChain
 import su.afk.kemonos.api.video_meta_api.application.security.AdminKeyService
 
@@ -18,6 +19,7 @@ import su.afk.kemonos.api.video_meta_api.application.security.AdminKeyService
 @Configuration
 class AdminSecurityConfig(
     private val adminKeyService: AdminKeyService,
+    private val adminBruteforceProtectionFilter: AdminBruteforceProtectionFilter,
 ) {
     @Bean
     @Order(1)
@@ -31,6 +33,7 @@ class AdminSecurityConfig(
             .sessionManagement { session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             }
+            .addFilterBefore(adminBruteforceProtectionFilter, BasicAuthenticationFilter::class.java)
             .authorizeHttpRequests { auth ->
                 auth.anyRequest().hasRole("ADMIN")
             }

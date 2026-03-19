@@ -38,6 +38,7 @@ class ThumbnailGenerationService(
     private val shortVideoSingleThumbnailMaxDurationSeconds: Long = 61
     private val sourceFrameExtractionAttempts: Int = 3
     private val thumbnailRoot: Path = Path.of(thumbnailRootPath)
+    private val normalizedThumbnailRoot: Path = thumbnailRoot.toAbsolutePath().normalize()
     private val thumbnailMaxBytes: Long = 30 * 1024
     private val thumbnailGenerationTimeoutMillis: Long =
         TimeUnit.SECONDS.toMillis(thumbnailGenerationTimeoutSeconds.coerceAtLeast(1))
@@ -59,9 +60,8 @@ class ThumbnailGenerationService(
      * Удаляет директорию миниатюр, связанную с указанным request-путём.
      */
     fun deleteThumbnailsByRequest(requestValue: String): Boolean {
-        val requestWithoutSlash = requestValue.removePrefix("/")
-        if (requestWithoutSlash.isBlank()) return false
-        val dir = thumbnailRoot.resolve(requestWithoutSlash)
+        val requestDir = resolveRequestDirectoryOrNull(requestValue) ?: return false
+        val dir = requestDir.dir
         if (!Files.exists(dir)) return false
         Files.walk(dir).use { stream ->
             stream.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
@@ -76,19 +76,17 @@ class ThumbnailGenerationService(
         if (statusCode !in 200..299 || durationSeconds <= 0) {
             return ThumbnailMeta(ready = false)
         }
-        val requestWithoutSlash = requestValue.removePrefix("/")
-        if (requestWithoutSlash.isBlank()) {
-            return ThumbnailMeta(ready = false)
-        }
+        val requestDir = resolveRequestDirectoryOrThrow(requestValue)
+        val requestKey = requestDir.key
+        val dir = requestDir.dir
 
         val currentFuture = CompletableFuture<ThumbnailMeta>()
-        val inFlight = inFlightGeneration.putIfAbsent(requestWithoutSlash, currentFuture)
+        val inFlight = inFlightGeneration.putIfAbsent(requestKey, currentFuture)
         if (inFlight != null) return joinThumbnailFuture(inFlight)
 
         try {
             val result = withGenerationPermit {
                 val deadlineMs = System.currentTimeMillis() + thumbnailGenerationTimeoutMillis
-                val dir = thumbnailRoot.resolve(requestWithoutSlash)
                 Files.createDirectories(dir)
                 ensureSingleThumbnail(sourceUrl, durationSeconds, 25, dir.resolve("25.webp"), deadlineMs)
                 if (durationSeconds < shortVideoSingleThumbnailMaxDurationSeconds) {
@@ -121,8 +119,40 @@ class ThumbnailGenerationService(
             logger.warn("Thumbnail generation failed for request={} url={}: {}", requestValue, sourceUrl, ex.message)
             throw ex
         } finally {
-            inFlightGeneration.remove(requestWithoutSlash, currentFuture)
+            inFlightGeneration.remove(requestKey, currentFuture)
         }
+    }
+
+    private fun resolveRequestDirectoryOrNull(requestValue: String): RequestDirectory? =
+        runCatching { resolveRequestDirectoryOrThrow(requestValue) }.getOrNull()
+
+    private fun resolveRequestDirectoryOrThrow(requestValue: String): RequestDirectory {
+        val requestWithoutSlash = requestValue.removePrefix("/").trim()
+        if (requestWithoutSlash.isBlank()) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid thumbnail request path")
+        }
+
+        val relative = runCatching { Path.of(requestWithoutSlash) }.getOrNull()
+            ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid thumbnail request path")
+        if (relative.isAbsolute) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid thumbnail request path")
+        }
+
+        val normalizedRelative = relative.normalize()
+        val normalizedKey = normalizedRelative.toString().replace('\\', '/')
+        if (normalizedKey.isBlank() || normalizedKey == "." || normalizedKey.startsWith("..")) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid thumbnail request path")
+        }
+
+        val dir = normalizedThumbnailRoot.resolve(normalizedRelative).normalize()
+        if (!dir.startsWith(normalizedThumbnailRoot)) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid thumbnail request path")
+        }
+
+        return RequestDirectory(
+            key = normalizedKey,
+            dir = dir,
+        )
     }
 
     /**
@@ -381,4 +411,9 @@ class ThumbnailGenerationService(
  */
 data class ThumbnailMeta(
     val ready: Boolean,
+)
+
+private data class RequestDirectory(
+    val key: String,
+    val dir: Path,
 )
