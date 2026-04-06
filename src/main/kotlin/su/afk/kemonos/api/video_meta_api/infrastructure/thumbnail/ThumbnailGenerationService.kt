@@ -29,7 +29,7 @@ class ThumbnailGenerationService(
     maxConcurrentGenerations: Int,
     @Value("\${app.thumbnail.ffmpeg-threads:2}")
     ffmpegThreads: Int,
-    @Value("\${app.thumbnail.scale-flags:bicublin}")
+    @Value("\${app.thumbnail.scale-flags:area}")
     scaleFlags: String,
     @Value("\${app.thumbnail.webp-compression-level:4}")
     webpCompressionLevel: Int,
@@ -53,8 +53,8 @@ class ThumbnailGenerationService(
     private val ffmpegThreadCount = ffmpegThreads.coerceAtLeast(1)
     // Уровень сжатия WebP: ниже значение быстрее, выше значение экономит размер ценой CPU.
     private val webpCompression = webpCompressionLevel.coerceIn(0, 6)
-    // Алгоритм ресайза кадра перед кодированием; bicublin даёт более аккуратный компромисс между скоростью и качеством.
-    private val scaleAlgorithm = scaleFlags.trim().ifBlank { "bicublin" }
+    // Алгоритм ресайза кадра перед кодированием; area лучше подходит для даунскейла превью.
+    private val scaleAlgorithm = scaleFlags.trim().ifBlank { "area" }
 
     /**
      * Удаляет директорию миниатюр, связанную с указанным request-путём.
