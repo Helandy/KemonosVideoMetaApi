@@ -28,7 +28,7 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("tools.jackson.module:jackson-module-kotlin")
-	implementation("org.xerial:sqlite-jdbc:3.45.1.0")
+	implementation("org.xerial:sqlite-jdbc:3.49.1.0")
 	implementation("org.hibernate.orm:hibernate-community-dialects")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")

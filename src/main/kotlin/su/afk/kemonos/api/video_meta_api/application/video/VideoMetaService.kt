@@ -651,6 +651,7 @@ class VideoMetaService(
             ProcessBuilder(
                 "ffprobe",
                 "-v", "error",
+                "-protocol_whitelist", "https,http,tcp,tls,crypto",
                 "-show_entries", "format=duration",
                 "-of", "default=noprint_wrappers=1:nokey=1",
                 url,
@@ -674,7 +675,9 @@ class VideoMetaService(
         }
 
         if (process.exitValue() != 0) {
-            val errorText = stderr.toString().trim().ifBlank { "unknown ffprobe error" }
+            val errorText = stderr.toString().lines()
+                .firstOrNull { it.isNotBlank() }?.take(120)
+                ?: "unknown ffprobe error"
             throw ResponseStatusException(HttpStatus.BAD_GATEWAY, "ffprobe failed: $errorText")
         }
 

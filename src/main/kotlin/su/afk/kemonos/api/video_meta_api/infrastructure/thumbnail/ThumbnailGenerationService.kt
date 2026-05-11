@@ -328,6 +328,7 @@ class ThumbnailGenerationService(
                 "-y",
                 "-v", "error",
                 "-threads", ffmpegThreadCount.toString(),
+                "-protocol_whitelist", "https,http,tcp,tls,crypto",
                 "-ss", String.format(Locale.US, "%.3f", second),
                 "-i", sourceUrl,
                 "-an",

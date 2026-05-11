@@ -46,6 +46,15 @@ class AdminKeyService(
 
         val generated = generateHexKey(32)
         Files.writeString(file, "$generated\n")
+        runCatching {
+            Files.setPosixFilePermissions(
+                file,
+                setOf(
+                    java.nio.file.attribute.PosixFilePermission.OWNER_READ,
+                    java.nio.file.attribute.PosixFilePermission.OWNER_WRITE,
+                ),
+            )
+        }
         adminKey = generated
     }
 
