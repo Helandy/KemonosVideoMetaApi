@@ -17,7 +17,6 @@ RUN apt-get update \
 
 COPY --from=build /workspace/build/libs/*.jar /app/app.jar
 
-ENV SPRING_PROFILES_ACTIVE=prod
 ENV JAVA_OPTS="-Xms256m -Xmx1024m"
 
 VOLUME ["/data"]

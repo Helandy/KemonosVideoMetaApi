@@ -59,6 +59,10 @@ Client -> nginx -> Spring Boot API -> SQLite
 ```
 
 Сервис поднимется на `http://localhost:8080`.
+Конфигурация по умолчанию теперь production-oriented и пишет данные в `/data`.
+Для локальной разработки сделай `/data` доступным для записи или переопредели
+пути через переменные окружения, например `SPRING_DATASOURCE_URL`,
+`APP_THUMBNAIL_ROOT` и `APP_ADMIN_KEY_PATH`.
 
 ### Docker Compose
 
@@ -72,19 +76,17 @@ docker compose up --build
 ## Конфигурация
 
 Основные переменные задаются через окружение. Значения по умолчанию лежат в
-[application.properties](./src/main/resources/application.properties)
-и
-[application-prod.properties](./src/main/resources/application-prod.properties).
+[application.properties](./src/main/resources/application.properties).
 
 Часто используемые переменные:
 
 | Переменная | Назначение | Значение по умолчанию |
 | --- | --- | --- |
-| `SPRING_DATASOURCE_URL` | Основная база метаданных | `jdbc:sqlite:./dataTest/video-meta.db` |
-| `APP_STATISTICS_DATASOURCE_URL` | База статистики запросов | `jdbc:sqlite:./dataTest/video-meta-statistics.db` |
-| `APP_SOURCE_ERROR_LOG_DATASOURCE_URL` | База ошибок источников | `jdbc:sqlite:./dataTest/video-meta-source-errors.db` |
-| `APP_THUMBNAIL_ROOT` | Каталог для thumbnail | `./dataTest/thumbnail` |
-| `APP_ADMIN_KEY_PATH` | Файл с admin key | `./dataTest/.admin.key` |
+| `SPRING_DATASOURCE_URL` | Основная база метаданных | `jdbc:sqlite:/data/video-meta.db` |
+| `APP_STATISTICS_DATASOURCE_URL` | База статистики запросов | `jdbc:sqlite:/data/video-meta-statistics.db` |
+| `APP_SOURCE_ERROR_LOG_DATASOURCE_URL` | База ошибок источников | `jdbc:sqlite:/data/video-meta-source-errors.db` |
+| `APP_THUMBNAIL_ROOT` | Каталог для thumbnail | `/data/thumbnail` |
+| `APP_ADMIN_KEY_PATH` | Файл с admin key | `/data/.admin.key` |
 | `APP_RATE_LIMIT_MAX_REQUESTS` | Лимит запросов за окно | `60` |
 | `APP_RATE_LIMIT_WINDOW_SECONDS` | Размер окна rate limit | `10` |
 | `APP_SOURCE_MAX_CONCURRENT_REQUESTS` | Параллельные запросы к upstream | `4` |

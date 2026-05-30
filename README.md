@@ -59,6 +59,10 @@ Protected endpoints:
 ```
 
 The application starts on `http://localhost:8080`.
+The default configuration is production-oriented and writes data under `/data`.
+For local development, either make `/data` writable or override the paths with
+environment variables such as `SPRING_DATASOURCE_URL`, `APP_THUMBNAIL_ROOT`,
+and `APP_ADMIN_KEY_PATH`.
 
 ### Docker Compose
 
@@ -72,19 +76,17 @@ If you use the `cloudflared` service, set `CLOUDFLARE_TUNNEL_TOKEN` in `.env`.
 ## Configuration
 
 The service is configured through environment variables. Defaults are defined in
-[application.properties](./src/main/resources/application.properties)
-and
-[application-prod.properties](./src/main/resources/application-prod.properties).
+[application.properties](./src/main/resources/application.properties).
 
 Common variables:
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `SPRING_DATASOURCE_URL` | Main metadata database | `jdbc:sqlite:./dataTest/video-meta.db` |
-| `APP_STATISTICS_DATASOURCE_URL` | Request statistics database | `jdbc:sqlite:./dataTest/video-meta-statistics.db` |
-| `APP_SOURCE_ERROR_LOG_DATASOURCE_URL` | Source error log database | `jdbc:sqlite:./dataTest/video-meta-source-errors.db` |
-| `APP_THUMBNAIL_ROOT` | Thumbnail output directory | `./dataTest/thumbnail` |
-| `APP_ADMIN_KEY_PATH` | File containing the admin key | `./dataTest/.admin.key` |
+| `SPRING_DATASOURCE_URL` | Main metadata database | `jdbc:sqlite:/data/video-meta.db` |
+| `APP_STATISTICS_DATASOURCE_URL` | Request statistics database | `jdbc:sqlite:/data/video-meta-statistics.db` |
+| `APP_SOURCE_ERROR_LOG_DATASOURCE_URL` | Source error log database | `jdbc:sqlite:/data/video-meta-source-errors.db` |
+| `APP_THUMBNAIL_ROOT` | Thumbnail output directory | `/data/thumbnail` |
+| `APP_ADMIN_KEY_PATH` | File containing the admin key | `/data/.admin.key` |
 | `APP_RATE_LIMIT_MAX_REQUESTS` | Requests allowed per rate-limit window | `60` |
 | `APP_RATE_LIMIT_WINDOW_SECONDS` | Rate-limit window size | `10` |
 | `APP_SOURCE_MAX_CONCURRENT_REQUESTS` | Concurrent upstream source requests | `4` |
