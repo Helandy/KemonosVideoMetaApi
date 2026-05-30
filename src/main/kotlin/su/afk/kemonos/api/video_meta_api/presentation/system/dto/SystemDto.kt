@@ -54,7 +54,7 @@ data class SourceErrorLogItemResponse(
     val stage: String,
     val statusCode: Int,
     val errorMessage: String?,
-    val retary: Int,
+    val retry: Int,
     val requests: Long,
     val createdAt: Instant,
 )

@@ -1,10 +1,10 @@
 package su.afk.kemonos.api.video_meta_api.application.security
 
 import jakarta.annotation.PostConstruct
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
+import su.afk.kemonos.api.video_meta_api.config.AdminProperties
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
@@ -18,12 +18,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 @Service
 class AdminKeyService(
-    @Value("\${app.admin.key.path:/data/.admin.key}")
-    private val adminKeyPath: String,
-    @Value("\${app.admin.max-failed-attempts:10}")
-    private val maxFailedAttempts: Int,
-    @Value("\${app.admin.ban-minutes:60}")
-    private val banMinutes: Long,
+    private val properties: AdminProperties,
 ) {
     @Volatile
     private lateinit var adminKey: String
@@ -34,7 +29,7 @@ class AdminKeyService(
      */
     @PostConstruct
     fun initAdminKey() {
-        val file = Path.of(adminKeyPath)
+        val file = Path.of(properties.key.path)
         Files.createDirectories(file.parent ?: Path.of("."))
         if (Files.exists(file)) {
             val existing = Files.readString(file).trim()
@@ -79,9 +74,9 @@ class AdminKeyService(
             }
 
             state.failedAttempts += 1
-            if (state.failedAttempts >= maxFailedAttempts.coerceAtLeast(1)) {
+            if (state.failedAttempts >= properties.maxFailedAttempts.coerceAtLeast(1)) {
                 state.failedAttempts = 0
-                state.bannedUntil = now.plus(Duration.ofMinutes(banMinutes.coerceAtLeast(1)))
+                state.bannedUntil = now.plus(Duration.ofMinutes(properties.banMinutes.coerceAtLeast(1)))
                 throw ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many invalid admin key attempts")
             }
 

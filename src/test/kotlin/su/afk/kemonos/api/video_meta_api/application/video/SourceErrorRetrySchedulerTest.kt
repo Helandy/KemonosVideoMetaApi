@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.data.domain.PageRequest
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
+import su.afk.kemonos.api.video_meta_api.config.SourceErrorRetryProperties
 import su.afk.kemonos.api.video_meta_api.infrastructure.persistence.entity.SourceErrorLogEntity
 import su.afk.kemonos.api.video_meta_api.infrastructure.persistence.repository.SourceErrorLogRepository
 import java.nio.file.Files
@@ -14,7 +15,7 @@ import kotlin.io.path.absolutePathString
 class SourceErrorRetrySchedulerTest {
 
     @Test
-    fun `retries oldest records and increments retary on failure`() {
+    fun `retries oldest records and increments retry on failure`() {
         val repository = SourceErrorLogRepository(
             JdbcTemplate(sqliteDataSource(Files.createTempFile("retry-scheduler", ".db").absolutePathString())),
         )
@@ -46,15 +47,17 @@ class SourceErrorRetrySchedulerTest {
                     throw IllegalStateException("still failing for ${errorLog.requestedUrl}")
                 }
             },
-            batchSize = 1,
-            maxRetary = 3,
+            properties = SourceErrorRetryProperties().apply {
+                batchSize = 1
+                maxRetry = 3
+            },
         )
 
         scheduler.retryOldestErrors()
 
         val rows = repository.findAllByOrderByCreatedAtAsc(PageRequest.of(0, 10))
         val retried = rows.first { it.requestedUrl == oldest.requestedUrl }
-        assertEquals(1, retried.retary)
+        assertEquals(1, retried.retry)
         assertEquals(2, rows.size)
     }
 
@@ -79,8 +82,10 @@ class SourceErrorRetrySchedulerTest {
             sourceErrorRetryService = object : SourceErrorRetryService {
                 override fun retrySourceError(errorLog: SourceErrorLogEntity): Boolean = true
             },
-            batchSize = 1,
-            maxRetary = 3,
+            properties = SourceErrorRetryProperties().apply {
+                batchSize = 1
+                maxRetry = 3
+            },
         )
 
         scheduler.retryOldestErrors()

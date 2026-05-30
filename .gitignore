@@ -46,3 +46,4 @@ logs/
 .admin.key
 dataTest/
 .DS_Store
+/local.properties

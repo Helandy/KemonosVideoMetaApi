@@ -1,12 +1,13 @@
 package su.afk.kemonos.api.video_meta_api.infrastructure.source
 
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
+import su.afk.kemonos.api.video_meta_api.config.InspectProperties
 import java.util.ArrayDeque
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Semaphore
+import java.util.concurrent.TimeUnit
 
 /**
  * Тип inspect-запроса, для которого выделяется отдельный лимит параллелизма.
@@ -22,16 +23,12 @@ enum class InspectRequestType {
  */
 @Service
 class SourceRequestLimiter(
-    @Value("\${app.inspect.file.max-concurrent-requests:\${app.inspect.max-concurrent-requests-per-endpoint:\${app.source.max-concurrent-requests:2}}}")
-    fileMaxConcurrentRequests: Int,
-    @Value("\${app.inspect.video.max-concurrent-requests:\${app.inspect.max-concurrent-requests-per-endpoint:\${app.source.max-concurrent-requests:2}}}")
-    videoMaxConcurrentRequests: Int,
-    @Value("\${app.inspect.max-queued-requests-per-user:60}")
-    maxQueuedRequestsPerUser: Int,
+    properties: InspectProperties,
 ) {
-    private val maxQueuedPerUser = maxQueuedRequestsPerUser.coerceAtLeast(1)
-    private val fileInfoQueue = EndpointQueue(fileMaxConcurrentRequests.coerceAtLeast(1))
-    private val videoInfoQueue = EndpointQueue(videoMaxConcurrentRequests.coerceAtLeast(1))
+    private val maxQueuedPerUser = properties.maxQueuedRequestsPerUser.coerceAtLeast(1)
+    private val maxQueueWaitMillis = TimeUnit.SECONDS.toMillis(properties.maxQueueWaitSeconds.coerceAtLeast(1))
+    private val fileInfoQueue = EndpointQueue(properties.file.maxConcurrentRequests.coerceAtLeast(1))
+    private val videoInfoQueue = EndpointQueue(properties.video.maxConcurrentRequests.coerceAtLeast(1))
     private val queuedRequestsByUser = HashMap<String, Int>()
 
     /**
@@ -40,8 +37,15 @@ class SourceRequestLimiter(
     fun <T> withPermit(type: InspectRequestType, userKey: String, block: () -> T): T {
         val normalizedUserKey = userKey.trim().ifBlank { "unknown" }.take(64)
         val permit = reservePermit(type, normalizedUserKey)
+        val granted = permit.await(maxQueueWaitMillis)
+        if (!granted && cancelQueuedPermit(type, permit)) {
+            throw ResponseStatusException(
+                HttpStatus.TOO_MANY_REQUESTS,
+                "Inspect request waited too long for an available slot",
+            )
+        }
+
         try {
-            permit.await()
             return block()
         } finally {
             releasePermit(type)
@@ -71,6 +75,15 @@ class SourceRequestLimiter(
             dispatchAvailable()
         }
     }
+
+    private fun cancelQueuedPermit(type: InspectRequestType, permit: QueuePermit): Boolean =
+        synchronized(this) {
+            val cancelled = queueFor(type).cancel(permit)
+            if (cancelled) {
+                decrementQueuedCount(permit.userKey)
+            }
+            cancelled
+        }
 
     private fun queueFor(type: InspectRequestType): EndpointQueue = when (type) {
         InspectRequestType.FILE_INFO -> fileInfoQueue
@@ -104,6 +117,17 @@ class SourceRequestLimiter(
                 queuedUsers.addLast(permit.userKey)
             }
             userQueue.addLast(permit)
+        }
+
+        fun cancel(permit: QueuePermit): Boolean {
+            val userQueue = queuedPermitsByUser[permit.userKey] ?: return false
+            val removed = userQueue.remove(permit)
+            if (!removed) return false
+            if (userQueue.isEmpty()) {
+                queuedPermitsByUser.remove(permit.userKey)
+                queuedUsers.remove(permit.userKey)
+            }
+            return true
         }
 
         fun releaseActive() {
@@ -146,18 +170,27 @@ private class QueuePermit(
         latch.countDown()
     }
 
-    fun await() {
+    fun await(maxWaitMillis: Long): Boolean {
         var interrupted = false
+        val deadline = System.currentTimeMillis() + maxWaitMillis
         while (true) {
             try {
-                latch.await()
-                break
+                val remaining = deadline - System.currentTimeMillis()
+                if (remaining <= 0) return restoreInterruptAndReturn(interrupted, false)
+                if (latch.await(remaining, TimeUnit.MILLISECONDS)) {
+                    return restoreInterruptAndReturn(interrupted, true)
+                }
+                return restoreInterruptAndReturn(interrupted, false)
             } catch (_: InterruptedException) {
                 interrupted = true
             }
         }
+    }
+
+    private fun restoreInterruptAndReturn(interrupted: Boolean, value: Boolean): Boolean {
         if (interrupted) {
             Thread.currentThread().interrupt()
         }
+        return value
     }
 }

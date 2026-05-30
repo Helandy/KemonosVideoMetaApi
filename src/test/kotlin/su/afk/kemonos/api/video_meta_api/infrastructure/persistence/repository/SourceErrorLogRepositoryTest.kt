@@ -28,7 +28,7 @@ class SourceErrorLogRepositoryTest {
                 stage = "HEAD:primary",
                 statusCode = 502,
                 errorMessage = "Remote source returned HTTP 502",
-                retary = 0,
+                retry = 0,
                 createdAt = Instant.parse("2026-03-11T10:00:00Z"),
             ),
         )
@@ -43,7 +43,7 @@ class SourceErrorLogRepositoryTest {
                 stage = "HEAD:primary",
                 statusCode = 502,
                 errorMessage = "Remote source returned HTTP 502",
-                retary = 0,
+                retry = 0,
                 createdAt = Instant.parse("2026-03-11T11:00:00Z"),
             ),
         )
@@ -59,7 +59,7 @@ class SourceErrorLogRepositoryTest {
     }
 
     @Test
-    fun `normalizes legacy created_at values to sqlite format on startup`() {
+    fun `normalizes created_at values to sqlite format on startup`() {
         val dbFile = Files.createTempFile("source-error-repository-legacy", ".db")
         val jdbcTemplate = JdbcTemplate(sqliteDataSource(dbFile.absolutePathString()))
         jdbcTemplate.execute(
@@ -75,7 +75,7 @@ class SourceErrorLogRepositoryTest {
                 stage text not null,
                 status_code integer not null,
                 error_message text,
-                retary integer not null default 0,
+                retry integer not null default 0,
                 requests integer not null default 1,
                 created_at text not null
             )
@@ -93,7 +93,7 @@ class SourceErrorLogRepositoryTest {
                 stage,
                 status_code,
                 error_message,
-                retary,
+                retry,
                 requests,
                 created_at
             ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -107,7 +107,7 @@ class SourceErrorLogRepositoryTest {
             "HEAD:primary",
             502,
             "Remote source returned HTTP 502",
-            0,
+            2,
             1,
             "2026-03-11T11:00:00Z",
         )
@@ -116,6 +116,7 @@ class SourceErrorLogRepositoryTest {
 
         val rows = repository.findAllByOrderByCreatedAtDesc(org.springframework.data.domain.PageRequest.of(0, 10))
         assertEquals(1, rows.size)
+        assertEquals(2, rows.first().retry)
         assertEquals(Instant.parse("2026-03-11T11:00:00Z"), rows.first().createdAt)
         assertEquals(
             "2026-03-11 11:00:00.000",

@@ -3,7 +3,6 @@ package su.afk.kemonos.api.video_meta_api.config
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
@@ -15,10 +14,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 @Component
 class ApiGuardFilter(
-    @Value("\${app.rate-limit.max-requests:60}")
-    private val maxRequests: Int,
-    @Value("\${app.rate-limit.window-seconds:10}")
-    private val windowSeconds: Long,
+    private val properties: RateLimitProperties,
     private val clientIpResolver: ClientIpResolver,
 ) : OncePerRequestFilter() {
     private val counters = ConcurrentHashMap<String, WindowCounter>()
@@ -52,7 +48,7 @@ class ApiGuardFilter(
 
         cleanupOldEntries(nowWindow)
 
-        if (newCount > maxRequests) {
+        if (newCount > properties.maxRequests.coerceAtLeast(1)) {
             writeError(
                 response = response,
                 status = 429,
@@ -80,7 +76,7 @@ class ApiGuardFilter(
     /**
      * Возвращает номер текущего временного окна для rate limiting.
      */
-    private fun currentWindow(): Long = System.currentTimeMillis() / (windowSeconds * 1_000)
+    private fun currentWindow(): Long = System.currentTimeMillis() / (properties.windowSeconds.coerceAtLeast(1) * 1_000)
 
     /**
      * Периодически очищает старые счётчики, чтобы карта не росла бесконечно.
@@ -103,6 +99,9 @@ class ApiGuardFilter(
         response.status = status
         response.contentType = MediaType.APPLICATION_JSON_VALUE
         response.characterEncoding = Charsets.UTF_8.name()
+        if (status == 429) {
+            response.setHeader("Retry-After", properties.windowSeconds.coerceAtLeast(1).toString())
+        }
         response.writer.write("""{"status":$status,"error":"$error","message":"$message"}""")
     }
 }

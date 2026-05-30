@@ -16,7 +16,7 @@ data class SourceErrorLogEntity(
     var stage: String = "",
     var statusCode: Int = 0,
     var errorMessage: String? = null,
-    var retary: Int = 0,
+    var retry: Int = 0,
     var requests: Long = 1,
     var createdAt: Instant = Instant.now(),
 )

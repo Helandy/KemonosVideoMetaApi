@@ -1,10 +1,10 @@
 package su.afk.kemonos.api.video_meta_api.application.video
 
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
+import su.afk.kemonos.api.video_meta_api.config.SourceErrorRetryProperties
 import su.afk.kemonos.api.video_meta_api.infrastructure.persistence.entity.SourceErrorLogEntity
 import su.afk.kemonos.api.video_meta_api.infrastructure.persistence.repository.SourceErrorLogRepository
 
@@ -15,10 +15,7 @@ import su.afk.kemonos.api.video_meta_api.infrastructure.persistence.repository.S
 class SourceErrorRetryScheduler(
     private val sourceErrorLogRepository: SourceErrorLogRepository,
     private val sourceErrorRetryService: SourceErrorRetryService,
-    @Value("\${app.source-error-log.retry.batch-size:25}")
-    private val batchSize: Int,
-    @Value("\${app.source-error-log.retry.max-retary:3}")
-    private val maxRetary: Int,
+    private val properties: SourceErrorRetryProperties,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -28,7 +25,7 @@ class SourceErrorRetryScheduler(
     )
     fun retryOldestErrors() {
         val rows = sourceErrorLogRepository.findAllByOrderByCreatedAtAsc(
-            PageRequest.of(0, batchSize.coerceAtLeast(1)),
+            PageRequest.of(0, properties.batchSize.coerceAtLeast(1)),
         )
         rows.forEach(::retrySingle)
     }
@@ -41,22 +38,22 @@ class SourceErrorRetryScheduler(
                 logger.info("Retry succeeded for source error log id={}, deleting row", rowId)
             }
             .onFailure { ex ->
-                val nextRetary = row.retary + 1
-                if (nextRetary >= maxRetary) {
+                val nextRetry = row.retry + 1
+                if (nextRetry >= properties.maxRetry.coerceAtLeast(1)) {
                     sourceErrorLogRepository.deleteById(rowId)
                     logger.warn(
-                        "Retry failed for source error log id={}, reached retary={}, deleting row: {}",
+                        "Retry failed for source error log id={}, reached retry={}, deleting row: {}",
                         rowId,
-                        nextRetary,
+                        nextRetry,
                         ex.message,
                     )
                 } else {
-                    sourceErrorLogRepository.updateRetary(rowId, nextRetary)
+                    sourceErrorLogRepository.updateRetry(rowId, nextRetry)
                     logger.warn(
-                        "Retry failed for source error log id={}, retary {} -> {}: {}",
+                        "Retry failed for source error log id={}, retry {} -> {}: {}",
                         rowId,
-                        row.retary,
-                        nextRetary,
+                        row.retry,
+                        nextRetry,
                         ex.message,
                     )
                 }

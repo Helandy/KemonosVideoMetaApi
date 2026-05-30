@@ -102,7 +102,7 @@ class SystemController(
                     stage = it.stage,
                     statusCode = it.statusCode,
                     errorMessage = it.errorMessage,
-                    retary = it.retary,
+                    retry = it.retry,
                     requests = it.requests,
                     createdAt = it.createdAt,
                 )

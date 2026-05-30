@@ -42,7 +42,7 @@ class SourceErrorLogRepository(
                 stage,
                 status_code,
                 error_message,
-                retary,
+                retry,
                 requests,
                 created_at
             from source_error_log
@@ -68,7 +68,7 @@ class SourceErrorLogRepository(
                 stage,
                 status_code,
                 error_message,
-                retary,
+                retry,
                 requests,
                 created_at
             from source_error_log
@@ -92,18 +92,18 @@ class SourceErrorLogRepository(
                 update source_error_log
                 set
                     requests = requests + ?,
-                    retary = ?,
+                    retry = ?,
                     created_at = ?
                 where id = ?
                 """.trimIndent(),
                 entity.requests,
-                max(existing.retary, entity.retary),
+                max(existing.retry, entity.retry),
                 formatInstant(maxInstant(existing.createdAt, entity.createdAt)),
                 existing.id,
             )
             return existing.copy(
                 requests = existing.requests + entity.requests,
-                retary = max(existing.retary, entity.retary),
+                retry = max(existing.retry, entity.retry),
                 createdAt = maxInstant(existing.createdAt, entity.createdAt),
             )
         }
@@ -120,7 +120,7 @@ class SourceErrorLogRepository(
                 stage,
                 status_code,
                 error_message,
-                retary,
+                retry,
                 requests,
                 created_at
             ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -134,7 +134,7 @@ class SourceErrorLogRepository(
             entity.stage,
             entity.statusCode,
             entity.errorMessage,
-            entity.retary,
+            entity.retry,
             entity.requests,
             formatInstant(entity.createdAt),
         )
@@ -155,13 +155,13 @@ class SourceErrorLogRepository(
                 stage text not null,
                 status_code integer not null,
                 error_message text,
-                retary integer not null default 0,
+                retry integer not null default 0,
                 requests integer not null default 1,
                 created_at text not null
             )
             """.trimIndent(),
         )
-        addColumnIfMissing("retary", "integer not null default 0")
+        addColumnIfMissing("retry", "integer not null default 0")
         addColumnIfMissing("requests", "integer not null default 1")
         jdbcTemplate.execute(
             "create index if not exists idx_source_error_log_created_at on source_error_log (created_at)",
@@ -215,7 +215,7 @@ class SourceErrorLogRepository(
                 stage,
                 status_code,
                 error_message,
-                retary,
+                retry,
                 requests,
                 created_at
             from source_error_log
@@ -242,10 +242,10 @@ class SourceErrorLogRepository(
             entity.errorMessage,
         ).firstOrNull()
 
-    fun updateRetary(id: Long, retary: Int) {
+    fun updateRetry(id: Long, retry: Int) {
         jdbcTemplate.update(
-            "update source_error_log set retary = ? where id = ?",
-            retary,
+            "update source_error_log set retry = ? where id = ?",
+            retry,
             id,
         )
     }
@@ -279,8 +279,9 @@ class SourceErrorLogRepository(
             stage = rs.getString("stage"),
             statusCode = rs.getInt("status_code"),
             errorMessage = rs.getString("error_message"),
-            retary = rs.getInt("retary"),
+            retry = rs.getInt("retry"),
             requests = rs.getLong("requests"),
             createdAt = parseInstant(rs.getString("created_at")),
         )
+
 }

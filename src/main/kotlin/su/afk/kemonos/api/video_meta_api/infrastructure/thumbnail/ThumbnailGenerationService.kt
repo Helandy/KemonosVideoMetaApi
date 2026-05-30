@@ -1,13 +1,16 @@
 package su.afk.kemonos.api.video_meta_api.infrastructure.thumbnail
 
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
+import su.afk.kemonos.api.video_meta_api.config.ThumbnailProperties
+import su.afk.kemonos.api.video_meta_api.infrastructure.process.ProcessRunner
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.time.Duration
 import java.util.Locale
 import java.util.Comparator
 import java.util.concurrent.CompletableFuture
@@ -21,40 +24,30 @@ import java.util.concurrent.TimeUnit
  */
 @Service
 class ThumbnailGenerationService(
-    @Value("\${app.thumbnail.root:/data/thumbnail}")
-    thumbnailRootPath: String,
-    @Value("\${app.thumbnail.generation-timeout-seconds:30}")
-    thumbnailGenerationTimeoutSeconds: Long,
-    @Value("\${app.thumbnail.max-concurrent-generations:\${app.source.max-concurrent-requests:4}}")
-    maxConcurrentGenerations: Int,
-    @Value("\${app.thumbnail.ffmpeg-threads:2}")
-    ffmpegThreads: Int,
-    @Value("\${app.thumbnail.scale-flags:area}")
-    scaleFlags: String,
-    @Value("\${app.thumbnail.webp-compression-level:4}")
-    webpCompressionLevel: Int,
+    properties: ThumbnailProperties,
+    private val processRunner: ProcessRunner,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
     private val shortVideoSingleThumbnailMaxDurationSeconds: Long = 61
     private val sourceFrameExtractionAttempts: Int = 3
-    private val thumbnailRoot: Path = Path.of(thumbnailRootPath)
+    private val thumbnailRoot: Path = Path.of(properties.root)
     private val normalizedThumbnailRoot: Path = thumbnailRoot.toAbsolutePath().normalize()
     private val thumbnailMaxBytes: Long = 30 * 1024
     private val thumbnailGenerationTimeoutMillis: Long =
-        TimeUnit.SECONDS.toMillis(thumbnailGenerationTimeoutSeconds.coerceAtLeast(1))
+        TimeUnit.SECONDS.toMillis(properties.generationTimeoutSeconds.coerceAtLeast(1))
     private val thumbnailVisibilityWaitMillis: Long = 1_000
     private val thumbnailVisibilityPollMillis: Long = 50
     private val thumbnailHeightSteps = listOf(720, 640, 560, 480, 420, 360, 320, 280, 240, 200, 180)
     private val thumbnailQualitySteps = listOf(70, 60, 50, 40, 30)
     private val inFlightGeneration = ConcurrentHashMap<String, CompletableFuture<ThumbnailMeta>>()
     // Лимитирует число одновременно идущих pipeline генерации превью.
-    private val generationSemaphore = Semaphore(maxConcurrentGenerations.coerceAtLeast(1), true)
+    private val generationSemaphore = Semaphore(properties.maxConcurrentGenerations.coerceAtLeast(1), true)
     // Ограничивает число worker threads, которые ffmpeg может занять внутри одного процесса.
-    private val ffmpegThreadCount = ffmpegThreads.coerceAtLeast(1)
+    private val ffmpegThreadCount = properties.ffmpegThreads.coerceAtLeast(1)
     // Уровень сжатия WebP: ниже значение быстрее, выше значение экономит размер ценой CPU.
-    private val webpCompression = webpCompressionLevel.coerceIn(0, 6)
+    private val webpCompression = properties.webpCompressionLevel.coerceIn(0, 6)
     // Алгоритм ресайза кадра перед кодированием; area лучше подходит для даунскейла превью.
-    private val scaleAlgorithm = scaleFlags.trim().ifBlank { "area" }
+    private val scaleAlgorithm = properties.scaleFlags.trim().ifBlank { "area" }
 
     /**
      * Удаляет директорию миниатюр, связанную с указанным request-путём.
@@ -205,10 +198,19 @@ class ThumbnailGenerationService(
 
         try {
             Files.createLink(aliasFile, sourceFile)
-        } catch (ex: UnsupportedOperationException) {
-            throw ResponseStatusException(HttpStatus.BAD_GATEWAY, "Hard links are not supported for thumbnail aliasing", ex)
+        } catch (_: UnsupportedOperationException) {
+            copyAliasThumbnail(sourceFile, aliasFile)
         } catch (ex: IOException) {
-            throw ResponseStatusException(HttpStatus.BAD_GATEWAY, "Could not create hard link for thumbnail alias", ex)
+            logger.debug("Could not create hard link for thumbnail alias, copying instead: {}", ex.message)
+            copyAliasThumbnail(sourceFile, aliasFile)
+        }
+    }
+
+    private fun copyAliasThumbnail(sourceFile: Path, aliasFile: Path) {
+        try {
+            Files.copy(sourceFile, aliasFile, StandardCopyOption.REPLACE_EXISTING)
+        } catch (ex: IOException) {
+            throw ResponseStatusException(HttpStatus.BAD_GATEWAY, "Could not copy thumbnail alias", ex)
         }
     }
 
@@ -322,22 +324,25 @@ class ThumbnailGenerationService(
         targetFile: Path,
         maxWaitMillis: Long,
     ): Boolean {
-        val process = try {
-            ProcessBuilder(
-                "ffmpeg",
-                "-y",
-                "-v", "error",
-                "-threads", ffmpegThreadCount.toString(),
-                "-protocol_whitelist", "https,http,tcp,tls,crypto",
-                "-ss", String.format(Locale.US, "%.3f", second),
-                "-i", sourceUrl,
-                "-an",
-                "-sn",
-                "-dn",
-                "-frames:v", "1",
-                "-vsync", "vfr",
-                targetFile.toString(),
-            ).start()
+        val result = try {
+            processRunner.run(
+                command = listOf(
+                    "ffmpeg",
+                    "-y",
+                    "-v", "error",
+                    "-threads", ffmpegThreadCount.toString(),
+                    "-protocol_whitelist", "https,http,tcp,tls,crypto",
+                    "-ss", String.format(Locale.US, "%.3f", second),
+                    "-i", sourceUrl,
+                    "-an",
+                    "-sn",
+                    "-dn",
+                    "-frames:v", "1",
+                    "-vsync", "vfr",
+                    targetFile.toString(),
+                ),
+                timeout = Duration.ofMillis(maxWaitMillis.coerceAtLeast(1)),
+            )
         } catch (ex: IOException) {
             throw ResponseStatusException(
                 HttpStatus.BAD_GATEWAY,
@@ -346,13 +351,13 @@ class ThumbnailGenerationService(
             )
         }
 
-        if (!process.waitFor(maxWaitMillis, TimeUnit.MILLISECONDS)) {
-            process.destroyForcibly()
+        if (result.timedOut) {
             throw generationTimeoutException()
         }
-        process.inputStream.use { it.readAllBytes() }
-        process.errorStream.use { it.readAllBytes() }
-        return process.exitValue() == 0
+        if (result.exitCode != 0) {
+            logger.debug("ffmpeg frame extraction failed: {}", result.stderr.lines().firstOrNull { it.isNotBlank() }?.take(160))
+        }
+        return result.exitCode == 0
     }
 
     /**
@@ -365,21 +370,24 @@ class ThumbnailGenerationService(
         targetFile: Path,
         maxWaitMillis: Long,
     ): Boolean {
-        val process = try {
-            ProcessBuilder(
-                "ffmpeg",
-                "-y",
-                "-v", "error",
-                "-threads", ffmpegThreadCount.toString(),
-                "-i", sourceFrame.toString(),
-                "-frames:v", "1",
-                "-vf", "scale=-2:min($height\\,ih):flags=$scaleAlgorithm",
-                "-c:v", "libwebp",
-                "-compression_level", webpCompression.toString(),
-                "-preset", "picture",
-                "-q:v", quality.toString(),
-                targetFile.toString(),
-            ).start()
+        val result = try {
+            processRunner.run(
+                command = listOf(
+                    "ffmpeg",
+                    "-y",
+                    "-v", "error",
+                    "-threads", ffmpegThreadCount.toString(),
+                    "-i", sourceFrame.toString(),
+                    "-frames:v", "1",
+                    "-vf", "scale=-2:min($height\\,ih):flags=$scaleAlgorithm",
+                    "-c:v", "libwebp",
+                    "-compression_level", webpCompression.toString(),
+                    "-preset", "picture",
+                    "-q:v", quality.toString(),
+                    targetFile.toString(),
+                ),
+                timeout = Duration.ofMillis(maxWaitMillis.coerceAtLeast(1)),
+            )
         } catch (ex: IOException) {
             throw ResponseStatusException(
                 HttpStatus.BAD_GATEWAY,
@@ -388,13 +396,13 @@ class ThumbnailGenerationService(
             )
         }
 
-        if (!process.waitFor(maxWaitMillis, TimeUnit.MILLISECONDS)) {
-            process.destroyForcibly()
+        if (result.timedOut) {
             throw generationTimeoutException()
         }
-        process.inputStream.use { it.readAllBytes() }
-        process.errorStream.use { it.readAllBytes() }
-        return process.exitValue() == 0
+        if (result.exitCode != 0) {
+            logger.debug("ffmpeg thumbnail compression failed: {}", result.stderr.lines().firstOrNull { it.isNotBlank() }?.take(160))
+        }
+        return result.exitCode == 0
     }
 
     /**
