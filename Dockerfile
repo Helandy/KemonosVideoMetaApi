@@ -17,7 +17,11 @@ RUN apt-get update \
 
 COPY --from=build /workspace/build/libs/*.jar /app/app.jar
 
-ENV JAVA_OPTS="-Xms256m -Xmx1024m"
+# Размер heap берётся от лимита контейнера, а не от памяти хоста.
+# SerialGC на небольшом heap заметно экономит RSS: нет региональных структур G1 и его потоков.
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=55 -XX:InitialRAMPercentage=20 -XX:+UseSerialGC -Xss512k \
+-XX:MaxMetaspaceSize=192m -XX:ReservedCodeCacheSize=96m -XX:MaxDirectMemorySize=64m \
+-XX:+ExitOnOutOfMemoryError"
 
 VOLUME ["/data"]
 EXPOSE 8080

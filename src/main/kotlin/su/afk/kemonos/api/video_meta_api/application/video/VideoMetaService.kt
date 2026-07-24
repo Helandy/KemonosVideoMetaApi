@@ -64,7 +64,7 @@ class VideoMetaService(
 
     fun removeVideo(request: VideoMetaLookupRequest): VideoMetaDeleteResult {
         val resolved = inputResolver.resolve(request)
-        val existing = repository.findByResolvedUrl(resolved.url).orElse(null)
+        val existing = repository.findByResolvedUrl(resolved.url)
             ?: return VideoMetaDeleteResult(
                 removed = false,
                 resolvedUrl = resolved.url,
@@ -309,10 +309,9 @@ class VideoMetaService(
         requestValue: String,
         mode: InspectMode,
     ): VideoMetaEntity? {
-        repository.findByResolvedUrl(resolved.url).orElse(null)?.let { return it }
+        repository.findByResolvedUrl(resolved.url)?.let { return it }
         if (!normalizedSite.isNullOrBlank()) {
             repository.findBySiteAndRequestAndMediaType(normalizedSite, requestValue, mode.storageValue)
-                .orElse(null)
                 ?.let { return it }
         }
         return null

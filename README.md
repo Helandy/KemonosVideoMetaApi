@@ -92,6 +92,14 @@ Common variables:
 | `APP_SOURCE_MAX_CONCURRENT_REQUESTS` | Concurrent upstream source requests | `4` |
 | `APP_INSPECT_MAX_QUEUED_REQUESTS_PER_USER` | Per-client queued inspect requests | `60` |
 | `APP_THUMBNAIL_GENERATION_TIMEOUT_SECONDS` | Thumbnail generation timeout | `30` |
+| `APP_THUMBNAIL_MAX_CONCURRENT_GENERATIONS` | Concurrent ffmpeg thumbnail pipelines | `2` |
+| `APP_THUMBNAIL_SOURCE_FRAME_MAX_HEIGHT` | Height the source frame is downscaled to before compression | `720` |
+| `APP_THUMBNAIL_SOURCE_PROBE_SIZE` | Bytes of the remote stream ffmpeg buffers while probing | `2M` |
+| `APP_THUMBNAIL_SOURCE_ANALYZE_DURATION_SECONDS` | Stream duration ffmpeg analyses before grabbing a frame | `2` |
+| `APP_STATISTICS_RETENTION_DAYS` | Days of request statistics kept; `0` disables the cleanup | `90` |
+| `SERVER_TOMCAT_THREADS_MAX` | Tomcat worker threads | `32` |
+| `SERVER_TOMCAT_MAX_CONNECTIONS` | Tomcat connections held open | `512` |
+| `SPRING_MAIN_LAZY_INITIALIZATION` | Create beans on first use | `true` |
 
 Admin authentication:
 

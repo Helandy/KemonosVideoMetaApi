@@ -38,10 +38,19 @@ class EndpointConcurrencyProperties(
 class ThumbnailProperties {
     var root: String = "/data/thumbnail"
     var generationTimeoutSeconds: Long = 30
-    var maxConcurrentGenerations: Int = 4
+    var maxConcurrentGenerations: Int = 2
     var ffmpegThreads: Int = 2
     var scaleFlags: String = "area"
     var webpCompressionLevel: Int = 4
+
+    /** Высота, до которой ужимается исходный кадр перед подбором параметров сжатия. */
+    var sourceFrameMaxHeight: Int = 720
+
+    /** Сколько байт удалённого потока ffmpeg буферизует для анализа контейнера. */
+    var sourceProbeSize: String = "2M"
+
+    /** Длительность потока, которую ffmpeg анализирует перед извлечением кадра. */
+    var sourceAnalyzeDurationSeconds: Long = 2
 }
 
 @ConfigurationProperties("app.admin")

@@ -37,6 +37,13 @@ class ThumbnailGenerationService(
         TimeUnit.SECONDS.toMillis(properties.generationTimeoutSeconds.coerceAtLeast(1))
     private val thumbnailVisibilityWaitMillis: Long = 1_000
     private val thumbnailVisibilityPollMillis: Long = 50
+    // Исходный кадр сразу ужимается до этой высоты: дальше он много раз перекодируется,
+    // и полноразмерный PNG на каждой итерации стоил бы десятков мегабайт RSS у ffmpeg.
+    private val sourceFrameMaxHeight: Int = properties.sourceFrameMaxHeight.coerceAtLeast(120)
+    // Ограничивает объём удалённого потока, который ffmpeg буферизует ради анализа контейнера.
+    private val sourceProbeBytes: String = properties.sourceProbeSize.trim().ifBlank { "2M" }
+    private val sourceAnalyzeDurationMicros: String =
+        (properties.sourceAnalyzeDurationSeconds.coerceAtLeast(1) * 1_000_000).toString()
     private val thumbnailHeightSteps = listOf(720, 640, 560, 480, 420, 360, 320, 280, 240, 200, 180)
     private val thumbnailQualitySteps = listOf(70, 60, 50, 40, 30)
     private val inFlightGeneration = ConcurrentHashMap<String, CompletableFuture<ThumbnailMeta>>()
@@ -329,8 +336,11 @@ class ThumbnailGenerationService(
                 command = listOf(
                     "ffmpeg",
                     "-y",
+                    "-nostdin",
                     "-v", "error",
                     "-threads", ffmpegThreadCount.toString(),
+                    "-probesize", sourceProbeBytes,
+                    "-analyzeduration", sourceAnalyzeDurationMicros,
                     "-protocol_whitelist", "https,http,tcp,tls,crypto",
                     "-ss", String.format(Locale.US, "%.3f", second),
                     "-i", sourceUrl,
@@ -339,9 +349,11 @@ class ThumbnailGenerationService(
                     "-dn",
                     "-frames:v", "1",
                     "-vsync", "vfr",
+                    "-vf", "scale=-2:min($sourceFrameMaxHeight\\,ih):flags=$scaleAlgorithm",
                     targetFile.toString(),
                 ),
                 timeout = Duration.ofMillis(maxWaitMillis.coerceAtLeast(1)),
+                captureStdout = false,
             )
         } catch (ex: IOException) {
             throw ResponseStatusException(
@@ -375,6 +387,7 @@ class ThumbnailGenerationService(
                 command = listOf(
                     "ffmpeg",
                     "-y",
+                    "-nostdin",
                     "-v", "error",
                     "-threads", ffmpegThreadCount.toString(),
                     "-i", sourceFrame.toString(),
@@ -387,6 +400,7 @@ class ThumbnailGenerationService(
                     targetFile.toString(),
                 ),
                 timeout = Duration.ofMillis(maxWaitMillis.coerceAtLeast(1)),
+                captureStdout = false,
             )
         } catch (ex: IOException) {
             throw ResponseStatusException(

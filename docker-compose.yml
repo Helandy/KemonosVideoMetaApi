@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: video-meta-nginx
     restart: unless-stopped
+    mem_limit: 128m
     depends_on:
       - api
     expose:
@@ -18,6 +19,7 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: video-meta-cloudflared
     restart: unless-stopped
+    mem_limit: 128m
     depends_on:
       - nginx
     environment:
@@ -30,6 +32,10 @@ services:
       dockerfile: Dockerfile
     container_name: video-meta-api
     restart: unless-stopped
+    # Лимит нужен и сам по себе, и чтобы MaxRAMPercentage считал heap от него,
+    # а не от всей памяти хоста. В лимит входят и процессы ffmpeg.
+    mem_limit: 900m
+    memswap_limit: 900m
     expose:
       - "8080"
     volumes:

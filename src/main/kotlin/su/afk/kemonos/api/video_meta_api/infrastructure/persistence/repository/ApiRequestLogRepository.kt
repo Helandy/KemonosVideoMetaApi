@@ -3,6 +3,7 @@ package su.afk.kemonos.api.video_meta_api.infrastructure.persistence.repository
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
+import su.afk.kemonos.api.video_meta_api.infrastructure.persistence.CreatedAtNormalizer
 import su.afk.kemonos.api.video_meta_api.infrastructure.persistence.converter.SqliteInstantConverter
 import su.afk.kemonos.api.video_meta_api.infrastructure.persistence.entity.ApiRequestLogEntity
 import java.time.Instant
@@ -19,7 +20,7 @@ class ApiRequestLogRepository(
 
     init {
         initializeSchema()
-        normalizeCreatedAtValues()
+        CreatedAtNormalizer(jdbcTemplate, TABLE_NAME).normalizeOnce()
     }
 
     /**
@@ -81,34 +82,23 @@ class ApiRequestLogRepository(
         )
     }
 
-    private fun normalizeCreatedAtValues() {
-        val rows = jdbcTemplate.query(
-            "select id, created_at from api_request_log",
-        ) { rs, _ ->
-            rs.getLong("id") to rs.getString("created_at")
-        }
-
-        rows.forEach { (id, rawCreatedAt) ->
-            val normalized = formatInstant(parseInstant(rawCreatedAt))
-            if (normalized != rawCreatedAt) {
-                jdbcTemplate.update(
-                    "update api_request_log set created_at = ? where id = ?",
-                    normalized,
-                    id,
-                )
-            }
-        }
-    }
-
-    private fun parseInstant(rawValue: String?): Instant =
-        requireNotNull(instantConverter.convertToEntityAttribute(rawValue)) {
-            "Could not read api_request_log.created_at: value is null or blank"
-        }
+    /**
+     * Удаляет записи старше указанного момента, чтобы таблица не росла бесконечно.
+     */
+    fun deleteOlderThan(threshold: Instant): Int =
+        jdbcTemplate.update(
+            "delete from api_request_log where created_at < ?",
+            formatInstant(threshold),
+        )
 
     private fun formatInstant(value: Instant): String =
         requireNotNull(instantConverter.convertToDatabaseColumn(value)) {
             "Could not write api_request_log.created_at"
         }
+
+    private companion object {
+        const val TABLE_NAME = "api_request_log"
+    }
 }
 
 /**

@@ -1,9 +1,9 @@
 package su.afk.kemonos.api.video_meta_api.infrastructure.persistence.repository
 
 import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.data.domain.Pageable
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
+import su.afk.kemonos.api.video_meta_api.infrastructure.persistence.CreatedAtNormalizer
 import su.afk.kemonos.api.video_meta_api.infrastructure.persistence.converter.SqliteInstantConverter
 import su.afk.kemonos.api.video_meta_api.infrastructure.persistence.entity.SourceErrorLogEntity
 import java.sql.ResultSet
@@ -22,39 +22,22 @@ class SourceErrorLogRepository(
 
     init {
         initializeSchema()
-        normalizeCreatedAtValues()
+        CreatedAtNormalizer(jdbcTemplate, TABLE_NAME).normalizeOnce()
     }
 
     /**
      * Возвращает последние ошибки в порядке убывания времени создания.
      */
-    fun findAllByOrderByCreatedAtDesc(pageable: Pageable): List<SourceErrorLogEntity> =
-        jdbcTemplate.query(
-            """
-            select
-                id,
-                client_version,
-                endpoint,
-                site,
-                request_value,
-                requested_url,
-                source_url,
-                stage,
-                status_code,
-                error_message,
-                retry,
-                requests,
-                created_at
-            from source_error_log
-            order by created_at desc
-            limit ? offset ?
-            """.trimIndent(),
-            ::mapRow,
-            pageable.pageSize,
-            pageable.offset.toInt(),
-        )
+    fun findLatest(limit: Int, offset: Int = 0): List<SourceErrorLogEntity> =
+        findOrdered(descending = true, limit = limit, offset = offset)
 
-    fun findAllByOrderByCreatedAtAsc(pageable: Pageable): List<SourceErrorLogEntity> =
+    /**
+     * Возвращает самые старые ошибки — их и повторяет планировщик.
+     */
+    fun findOldest(limit: Int, offset: Int = 0): List<SourceErrorLogEntity> =
+        findOrdered(descending = false, limit = limit, offset = offset)
+
+    private fun findOrdered(descending: Boolean, limit: Int, offset: Int): List<SourceErrorLogEntity> =
         jdbcTemplate.query(
             """
             select
@@ -72,12 +55,12 @@ class SourceErrorLogRepository(
                 requests,
                 created_at
             from source_error_log
-            order by created_at asc
+            order by created_at ${if (descending) "desc" else "asc"}
             limit ? offset ?
             """.trimIndent(),
             ::mapRow,
-            pageable.pageSize,
-            pageable.offset.toInt(),
+            limit.coerceAtLeast(1),
+            offset.coerceAtLeast(0),
         )
 
     fun count(): Long =
@@ -174,25 +157,6 @@ class SourceErrorLogRepository(
         )
     }
 
-    private fun normalizeCreatedAtValues() {
-        val rows = jdbcTemplate.query(
-            "select id, created_at from source_error_log",
-        ) { rs, _ ->
-            rs.getLong("id") to rs.getString("created_at")
-        }
-
-        rows.forEach { (id, rawCreatedAt) ->
-            val normalized = formatInstant(parseInstant(rawCreatedAt))
-            if (normalized != rawCreatedAt) {
-                jdbcTemplate.update(
-                    "update source_error_log set created_at = ? where id = ?",
-                    normalized,
-                    id,
-                )
-            }
-        }
-    }
-
     private fun addColumnIfMissing(columnName: String, definition: String) {
         val columns = jdbcTemplate.query(
             "pragma table_info(source_error_log)",
@@ -284,4 +248,7 @@ class SourceErrorLogRepository(
             createdAt = parseInstant(rs.getString("created_at")),
         )
 
+    private companion object {
+        const val TABLE_NAME = "source_error_log"
+    }
 }

@@ -92,6 +92,14 @@ docker compose up --build
 | `APP_SOURCE_MAX_CONCURRENT_REQUESTS` | Параллельные запросы к upstream | `4` |
 | `APP_INSPECT_MAX_QUEUED_REQUESTS_PER_USER` | Максимальная очередь inspect на клиента | `60` |
 | `APP_THUMBNAIL_GENERATION_TIMEOUT_SECONDS` | Таймаут генерации thumbnail | `30` |
+| `APP_THUMBNAIL_MAX_CONCURRENT_GENERATIONS` | Параллельные пайплайны ffmpeg | `2` |
+| `APP_THUMBNAIL_SOURCE_FRAME_MAX_HEIGHT` | Высота, до которой ужимается исходный кадр | `720` |
+| `APP_THUMBNAIL_SOURCE_PROBE_SIZE` | Сколько данных потока ffmpeg буферизует при анализе | `2M` |
+| `APP_THUMBNAIL_SOURCE_ANALYZE_DURATION_SECONDS` | Длительность анализа потока перед снятием кадра | `2` |
+| `APP_STATISTICS_RETENTION_DAYS` | Сколько дней хранить статистику запросов; `0` отключает чистку | `90` |
+| `SERVER_TOMCAT_THREADS_MAX` | Рабочие потоки Tomcat | `32` |
+| `SERVER_TOMCAT_MAX_CONNECTIONS` | Одновременно удерживаемые соединения Tomcat | `512` |
+| `SPRING_MAIN_LAZY_INITIALIZATION` | Создавать бины при первом обращении | `true` |
 
 Admin авторизация:
 

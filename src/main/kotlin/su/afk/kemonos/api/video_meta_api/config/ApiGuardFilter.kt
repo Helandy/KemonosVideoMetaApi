@@ -20,6 +20,9 @@ class ApiGuardFilter(
     private val counters = ConcurrentHashMap<String, WindowCounter>()
     private val versionRegex = Regex("""^\d+\.\d+(\.\d+)?$""")
 
+    @Volatile
+    private var lastCleanupWindow: Long = Long.MIN_VALUE
+
     /**
      * Не применяет фильтр к раздаче миниатюр.
      */
@@ -79,10 +82,19 @@ class ApiGuardFilter(
     private fun currentWindow(): Long = System.currentTimeMillis() / (properties.windowSeconds.coerceAtLeast(1) * 1_000)
 
     /**
-     * Периодически очищает старые счётчики, чтобы карта не росла бесконечно.
+     * Очищает устаревшие счётчики не чаще одного раза за окно,
+     * чтобы карта не росла бесконечно и при этом обход не выполнялся на каждом запросе.
      */
     private fun cleanupOldEntries(nowWindow: Long) {
-        if (counters.size < 20_000) return
+        if (nowWindow == lastCleanupWindow) return
+        if (counters.size < CLEANUP_SIZE_THRESHOLD) {
+            lastCleanupWindow = nowWindow
+            return
+        }
+        synchronized(this) {
+            if (nowWindow == lastCleanupWindow) return
+            lastCleanupWindow = nowWindow
+        }
         val minWindowToKeep = nowWindow - 1
         counters.entries.removeIf { it.value.window < minWindowToKeep }
     }
@@ -105,6 +117,11 @@ class ApiGuardFilter(
         response.writer.write("""{"status":$status,"error":"$error","message":"$message"}""")
     }
 }
+
+/**
+ * Начиная с этого размера карту счётчиков имеет смысл прореживать.
+ */
+private const val CLEANUP_SIZE_THRESHOLD = 2_000
 
 /**
  * Счётчик запросов клиента в рамках одного временного окна.

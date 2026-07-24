@@ -2,7 +2,6 @@ package su.afk.kemonos.api.video_meta_api.application.video
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import org.springframework.data.domain.PageRequest
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
 import su.afk.kemonos.api.video_meta_api.config.SourceErrorRetryProperties
@@ -55,7 +54,7 @@ class SourceErrorRetrySchedulerTest {
 
         scheduler.retryOldestErrors()
 
-        val rows = repository.findAllByOrderByCreatedAtAsc(PageRequest.of(0, 10))
+        val rows = repository.findOldest(limit = 10)
         val retried = rows.first { it.requestedUrl == oldest.requestedUrl }
         assertEquals(1, retried.retry)
         assertEquals(2, rows.size)

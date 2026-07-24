@@ -17,7 +17,6 @@ import java.net.http.HttpResponse
 import java.time.Duration
 import java.time.Instant
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToLong
 
 @Service
@@ -30,8 +29,9 @@ class HttpSourceMetadataClient(
         .followRedirects(HttpClient.Redirect.NORMAL)
         .connectTimeout(Duration.ofSeconds(8))
         .build()
-    private val redirectCache = ConcurrentHashMap<String, CachedRedirect>()
     private val redirectCacheTtl: Duration = Duration.ofHours(6)
+    // LRU с жёсткой границей: записи, к которым больше не обращаются, не живут вечно.
+    private val redirectCache = RedirectCache(maxEntries = REDIRECT_CACHE_MAX_ENTRIES)
 
     override fun fetchRemoteMeta(url: String, siteRootUrl: String?, errorLogContext: SourceErrorLogContext): RemoteMeta {
         try {
@@ -85,20 +85,17 @@ class HttpSourceMetadataClient(
         }
     }
 
-    override fun resolveCachedSourceUrl(originalUrl: String): String {
-        val cached = redirectCache[originalUrl] ?: return originalUrl
-        if (cached.expiresAt.isBefore(Instant.now())) {
-            redirectCache.remove(originalUrl, cached)
-            return originalUrl
-        }
-        return cached.url
-    }
+    override fun resolveCachedSourceUrl(originalUrl: String): String =
+        redirectCache.get(originalUrl) ?: originalUrl
 
     private fun rememberRedirect(originalUrl: String, effectiveUrl: String) {
         if (originalUrl == effectiveUrl) return
-        redirectCache[originalUrl] = CachedRedirect(
-            url = effectiveUrl,
-            expiresAt = Instant.now().plus(redirectCacheTtl),
+        redirectCache.put(
+            key = originalUrl,
+            value = CachedRedirect(
+                url = effectiveUrl,
+                expiresAt = Instant.now().plus(redirectCacheTtl),
+            ),
         )
     }
 
@@ -114,6 +111,8 @@ class HttpSourceMetadataClient(
                     url,
                 ),
                 timeout = Duration.ofSeconds(20),
+                // Ответ — одно число, держать килобайты под него незачем.
+                outputLimitBytes = 512,
             )
         } catch (ex: IOException) {
             throw ResponseStatusException(
@@ -218,10 +217,40 @@ class HttpSourceMetadataClient(
     }
 }
 
+private const val REDIRECT_CACHE_MAX_ENTRIES = 5_000
+
 private data class CachedRedirect(
     val url: String,
     val expiresAt: Instant,
 )
+
+/**
+ * Кэш редиректов с ограниченным числом записей и TTL.
+ *
+ * Вытеснение по LRU гарантирует верхнюю границу занимаемой памяти независимо от того,
+ * сколько уникальных URL прошло через сервис.
+ */
+private class RedirectCache(private val maxEntries: Int) {
+    private val entries = object : LinkedHashMap<String, CachedRedirect>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedRedirect>): Boolean =
+            size > maxEntries
+    }
+
+    @Synchronized
+    fun get(key: String): String? {
+        val cached = entries[key] ?: return null
+        if (cached.expiresAt.isBefore(Instant.now())) {
+            entries.remove(key)
+            return null
+        }
+        return cached.url
+    }
+
+    @Synchronized
+    fun put(key: String, value: CachedRedirect) {
+        entries[key] = value
+    }
+}
 
 internal fun buildMirrorFallbackUrl(url: String, siteRootUrl: String?): String? {
     val uri = runCatching { URI(url) }.getOrNull() ?: return null

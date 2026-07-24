@@ -1,7 +1,7 @@
 package su.afk.kemonos.api.video_meta_api.application.video
 
 import org.slf4j.LoggerFactory
-import org.springframework.data.domain.PageRequest
+import org.springframework.context.annotation.Lazy
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import su.afk.kemonos.api.video_meta_api.config.SourceErrorRetryProperties
@@ -12,6 +12,7 @@ import su.afk.kemonos.api.video_meta_api.infrastructure.persistence.repository.S
  * Периодически повторяет запросы из журнала ошибок, начиная с самых старых.
  */
 @Component
+@Lazy(false)
 class SourceErrorRetryScheduler(
     private val sourceErrorLogRepository: SourceErrorLogRepository,
     private val sourceErrorRetryService: SourceErrorRetryService,
@@ -24,9 +25,7 @@ class SourceErrorRetryScheduler(
         fixedDelayString = "\${app.source-error-log.retry.fixed-delay-millis:600000}",
     )
     fun retryOldestErrors() {
-        val rows = sourceErrorLogRepository.findAllByOrderByCreatedAtAsc(
-            PageRequest.of(0, properties.batchSize.coerceAtLeast(1)),
-        )
+        val rows = sourceErrorLogRepository.findOldest(limit = properties.batchSize.coerceAtLeast(1))
         rows.forEach(::retrySingle)
     }
 

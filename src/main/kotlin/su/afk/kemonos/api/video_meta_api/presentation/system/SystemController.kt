@@ -2,7 +2,6 @@ package su.afk.kemonos.api.video_meta_api.presentation.system
 
 import jakarta.validation.Valid
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.data.domain.PageRequest
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -88,7 +87,7 @@ class SystemController(
 
     private fun loadSourceErrors(limit: Int): SourceErrorLogResponse {
         val normalizedLimit = limit.coerceIn(1, 500)
-        val rows = sourceErrorLogRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, normalizedLimit))
+        val rows = sourceErrorLogRepository.findLatest(limit = normalizedLimit)
         return SourceErrorLogResponse(
             total = sourceErrorLogRepository.count(),
             items = rows.map {

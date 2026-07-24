@@ -48,7 +48,7 @@ class SourceErrorLogRepositoryTest {
             ),
         )
 
-        val rows = repository.findAllByOrderByCreatedAtDesc(org.springframework.data.domain.PageRequest.of(0, 10))
+        val rows = repository.findLatest(limit = 10)
         assertEquals(1, rows.size)
         assertEquals(2, rows.first().requests)
         assertEquals(Instant.parse("2026-03-11T11:00:00Z"), rows.first().createdAt)
@@ -114,7 +114,7 @@ class SourceErrorLogRepositoryTest {
 
         val repository = SourceErrorLogRepository(jdbcTemplate)
 
-        val rows = repository.findAllByOrderByCreatedAtDesc(org.springframework.data.domain.PageRequest.of(0, 10))
+        val rows = repository.findLatest(limit = 10)
         assertEquals(1, rows.size)
         assertEquals(2, rows.first().retry)
         assertEquals(Instant.parse("2026-03-11T11:00:00Z"), rows.first().createdAt)

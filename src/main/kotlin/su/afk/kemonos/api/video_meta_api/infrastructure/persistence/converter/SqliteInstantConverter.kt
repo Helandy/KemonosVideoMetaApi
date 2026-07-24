@@ -1,7 +1,5 @@
 package su.afk.kemonos.api.video_meta_api.infrastructure.persistence.converter
 
-import jakarta.persistence.AttributeConverter
-import jakarta.persistence.Converter
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
@@ -11,14 +9,13 @@ import java.time.format.DateTimeFormatter
  * Хранит `Instant` в SQLite как строку `yyyy-MM-dd HH:mm:ss.SSS` (UTC)
  * и читает как этот формат, так и legacy epoch-секунды/миллисекунды.
  */
-@Converter
-class SqliteInstantConverter : AttributeConverter<Instant, String> {
-    override fun convertToDatabaseColumn(attribute: Instant?): String? {
+class SqliteInstantConverter {
+    fun convertToDatabaseColumn(attribute: Instant?): String? {
         if (attribute == null) return null
         return SQLITE_TIMESTAMP_FORMATTER.format(LocalDateTime.ofInstant(attribute, ZoneOffset.UTC))
     }
 
-    override fun convertToEntityAttribute(dbData: String?): Instant? {
+    fun convertToEntityAttribute(dbData: String?): Instant? {
         val value = dbData?.trim().orEmpty()
         if (value.isEmpty()) return null
 
